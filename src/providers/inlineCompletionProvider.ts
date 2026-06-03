@@ -49,6 +49,9 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
         return null
       }
 
+      if (!completion || !completion.trim()) {
+        return Promise.resolve({items: []})
+      }
       const newItem = new vscode.InlineCompletionItem(completion)
       return Promise.resolve({
         items: [newItem],

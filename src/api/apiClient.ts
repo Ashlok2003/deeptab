@@ -17,12 +17,12 @@ const PROVIDER_CONFIGS: Record<ApiProvider, ProviderConfig> = {
     getModel: () => getConfig().openrouterModel,
   },
   groq: {
-    endpoint: 'https://api.groq.com/v1/generate',
+    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
     getApiKey: () => getConfig().groqApiKey,
     getModel: () => getConfig().model,
   },
   fireworks: {
-    endpoint: 'https://api.fireworks.ai/v1/generate',
+    endpoint: 'https://api.fireworks.ai/inference/v1/chat/completions',
     getApiKey: () => getConfig().fireworksApiKey,
     getModel: () => getConfig().model,
   },
@@ -145,9 +145,10 @@ export class ApiClient implements vscode.Disposable {
         let lines = buffer.split('\n')
         buffer = lines.pop() || ''
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
+        for (const rawLine of lines) {
+          const line = rawLine.trim()
+          if (line.startsWith('data:')) {
+            const data = line.slice(5).trim()
             if (data === '[DONE]') {
               return
             }
@@ -177,5 +178,7 @@ export class ApiClient implements vscode.Disposable {
     this.outputChannel.appendLine(`[ApiClient] ${message}`)
   }
 
-  dispose() {}
+  dispose() {
+    this.cancel()
+  }
 }

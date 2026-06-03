@@ -17,7 +17,14 @@ sequenceDiagram
 
     VS->>ICP: provideInlineCompletionItems(\n document,\n position,\n context,\n token\n)
 
-    ICP-->>VS: Promise<InlineCompletionList | null>
+    Note over ICP: Stream completion from API client
+    alt Cancellation requested
+        ICP-->>VS: null (cancelled)
+    else Error
+        ICP-->>VS: null (error logged)
+    else Success
+        ICP-->>VS: Promise<InlineCompletionList>
+    end
 
     VS-->>U: Display inline suggestion
 ```

@@ -35,14 +35,14 @@ flowchart TD
 
     subgraph RequestProcessing["Request Processing"]
         T[Clean response text]
-        T --> U[DedaplicationService]
+        T --> U[DeduplicationService]
         U --> V{Duplicate\ncheck}
         V -->|Duplicate| U
     end
 
     subgraph CompletionDisplay["Completion Display"]
         W[Compute minimal diff]
-        W --> X[Create InlineCompletion2tem]
+        W --> X[Create InlineCompletionItem]
         W --> Y[DeletionDecorationManager]
         X --> Z([Show ghost text in editor])
         Y --> Z

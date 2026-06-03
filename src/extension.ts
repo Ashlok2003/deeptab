@@ -11,6 +11,7 @@ let outputChannel: vscode.OutputChannel | undefined
 export function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel('Deeptab')
   outputChannel.appendLine('Deeptab extension activated')
+  context.subscriptions.push(outputChannel)
 
   provider = new InlineCompletionProvider(outputChannel)
 
