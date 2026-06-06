@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import {ApiClient} from '../api/apiClient'
-import {ChatMessage, PendingCompletion} from '../utils/types'
+import {ChatMessage, PendingCompletion, ReplacementEdit} from '../utils/types'
 
 /**
  * Inline completion provider for DeepTab.
@@ -14,6 +14,9 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
   private readonly outputChannel: vscode.OutputChannel
   private readonly apiClient: ApiClient
   private pendingCompletion: PendingCompletion | null = null
+  private lastCompletionText = ''
+  private lastCompletionPosition: vscode.Position | null = null
+  private lastCompletionUri: string | null = null
 
   constructor(outputChannel: vscode.OutputChannel) {
     this.outputChannel = outputChannel
@@ -28,13 +31,23 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
   ): Promise<vscode.InlineCompletionList | null> {
     try {
       this.log(`provideInlineCompletionItems called at ${position.line}:${position.character}`)
+      /* Stage 1: Check for existing pending completion */
       const pendingCompletionResult = this.handleExistingPendingCompletion(document, position)
 
       if (pendingCompletionResult !== undefined) {
         return pendingCompletionResult
       }
+      /* Stage 2: Cache */
 
-      const prefix = document.getText(new vscode.Range(new vscode.Position(0, 0), position))
+      /* Stage 3: Try to continue the previous prediction */
+      const continueResult = this.tryContinuePrediction(document, position)
+      if (continueResult !== undefined) {
+        return continueResult
+      }
+
+      const prefix = document.getText(
+        new vscode.Range(new vscode.Position(position.line, 0), position),
+      )
 
       if (token.isCancellationRequested) {
         this.log('Completion request cancelled before API call')
@@ -63,18 +76,74 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
         return Promise.resolve({items: []})
       }
 
-      this.pendingCompletion = {
-        documentUri: document.uri.toString(),
-        edit: {
-          insertText: completion,
-          startPosition: position,
-        },
+      const edit: ReplacementEdit = {
+        insertText: completion,
+        startPosition: position,
       }
-      return this.createInlineCompletionList(completion)
+
+      return this.activateCompletion(edit, document)
     } catch (error) {
       this.log(`Unexpected error: ${error}`)
       return null
     }
+  }
+
+  private activateCompletion(
+    edit: ReplacementEdit,
+    document: vscode.TextDocument,
+  ): vscode.InlineCompletionList | null {
+    this.lastCompletionText = edit.insertText
+    this.lastCompletionPosition = edit.startPosition
+    this.lastCompletionUri = document.uri.toString()
+
+    this.pendingCompletion = {
+      documentUri: document.uri.toString(),
+      edit,
+    }
+
+    return this.createInlineCompletionList(edit.insertText)
+  }
+
+  private tryContinuePrediction(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+  ): vscode.InlineCompletionList | null | undefined {
+    if (
+      !this.lastCompletionText ||
+      !this.lastCompletionPosition ||
+      !this.lastCompletionUri?.toString()
+    ) {
+      return undefined
+    }
+
+    const charsSinceCompletion = position.character - this.lastCompletionPosition.character
+    if (position.line !== this.lastCompletionPosition.line || charsSinceCompletion <= 0) {
+      return undefined
+    }
+
+    const typedText = document.getText(new vscode.Range(this.lastCompletionPosition, position))
+
+    if (
+      charsSinceCompletion <= this.lastCompletionText.length &&
+      this.lastCompletionText.startsWith(typedText)
+    ) {
+      const remaining = this.lastCompletionText.slice(typedText.length)
+      if (remaining) {
+        this.log(`Continuing prediction with remaining text: "${remaining}"`)
+        return this.createInlineCompletionList(remaining, new vscode.Range(position, position))
+      }
+      this.log('User has typed the entire completion text')
+      this.lastCompletionText = ''
+      this.lastCompletionPosition = null
+      return null
+    }
+
+    this.log(
+      `Divergence detected: expected ${this.lastCompletionText}, but user typed "${typedText}"`,
+    )
+    this.lastCompletionText = ''
+    this.lastCompletionPosition = null
+    return undefined
   }
 
   private createInlineCompletionList(
