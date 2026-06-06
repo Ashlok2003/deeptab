@@ -11,7 +11,6 @@ let outputChannel: vscode.OutputChannel | undefined
 export function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel('Deeptab')
   outputChannel.appendLine('Deeptab extension activated')
-  context.subscriptions.push(outputChannel)
 
   provider = new InlineCompletionProvider(outputChannel)
 
@@ -20,7 +19,7 @@ export function activate(context: vscode.ExtensionContext) {
     provider,
   )
 
-  context.subscriptions.push(providerDisposable)
+  context.subscriptions.push(providerDisposable, outputChannel)
 }
 
 // This method is called when your extension is deactivated
