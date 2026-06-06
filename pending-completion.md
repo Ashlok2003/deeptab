@@ -13,15 +13,20 @@ flowchart TD
     end
 
     B -->|No| H
+    G --> H
 
-    subgraph lang["Language Validation"]
-        H{Language Enabled?}
-        H -->|No| I([Return null - skip])
+    subgraph predict["Try Continue Prediction"]
+        H{Has Last\nCompletion?}
+        H -->|Yes| I{Same Line &\nMoved Forward?}
+        I -->|Yes| J{Typed Text Matches\nCompletion Prefix?}
+        J -->|Yes| K([Return Remaining\nCompletion Text])
+        J -->|No| L([Clear State & Continue])
+        I -->|No| M([Return undefined])
     end
 
-    H -->|Yes| J
+    H -->|No| N
+    L --> N
+    M --> N
 
-    subgraph cache["Cache Lookup"]
-        J([Compute Edit History Hash])
-    end
+    N([Call Completion API]) --> O([Activate & Return Completion])
 ```

@@ -21,17 +21,17 @@
         "deeptab.fireworksApiKey": {
           "type": "string",
           "default": "",
-          "description": "API key for the Fireworks service. Required for deeptab to function."
+          "description": "API key for the Fireworks service. Required when using Fireworks as the provider."
         },
         "deeptab.groqApiKey": {
           "type": "string",
           "default": "",
-          "description": "API key for the Groq service. Required for deeptab to function."
+          "description": "API key for the Groq service. Required when using Groq as the provider."
         },
         "deeptab.openrouterApiKey": {
           "type": "string",
           "default": "",
-          "description": "API key for the OpenRouter service. Required for deeptab to function."
+          "description": "API key for the OpenRouter service. Required when using OpenRouter as the provider."
         },
         "deeptab.openrouterModel": {
           "type": "string",

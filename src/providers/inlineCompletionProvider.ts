@@ -111,7 +111,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     if (
       !this.lastCompletionText ||
       !this.lastCompletionPosition ||
-      !this.lastCompletionUri?.toString()
+      !this.lastCompletionUri
     ) {
       return undefined
     }
@@ -143,6 +143,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     )
     this.lastCompletionText = ''
     this.lastCompletionPosition = null
+    this.clearPendingCompletion()
     return undefined
   }
 

@@ -71,7 +71,10 @@ export class ConfigurationService implements vscode.Disposable {
     return {
       fireworksApiKey: config.get<string>('fireworksApiKey', DEFAULTS.fireworksApiKey) || '',
       groqApiKey: config.get<string>('groqApiKey', DEFAULTS.groqApiKey) || '',
-      openRouterApiKey: config.get<string>('openrouterApiKey', DEFAULTS.openRouterApiKey) || '',
+      openRouterApiKey:
+        config.get<string>('openrouterApiKey', '') ||
+        config.get<string>('openRouterApiKey', DEFAULTS.openRouterApiKey) ||
+        '',
       model: config.get<string>('model', DEFAULTS.model) || '',
       openrouterModel: config.get<string>('openrouterModel', DEFAULTS.openrouterModel) || '',
       maxTokens: config.get<number>('maxTokens', DEFAULTS.maxTokens) || 2048,
