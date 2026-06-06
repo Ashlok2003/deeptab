@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import {ApiClient} from '../api/apiClient'
-import {ChatMessage} from '../utils/types'
+import {ChatMessage, PendingCompletion} from '../utils/types'
 
 /**
  * Inline completion provider for DeepTab.
@@ -13,6 +13,7 @@ import {ChatMessage} from '../utils/types'
 export class InlineCompletionProvider implements vscode.InlineCompletionItemProvider {
   private readonly outputChannel: vscode.OutputChannel
   private readonly apiClient: ApiClient
+  private pendingCompletion: PendingCompletion | null = null
 
   constructor(outputChannel: vscode.OutputChannel) {
     this.outputChannel = outputChannel
@@ -26,10 +27,19 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     token: vscode.CancellationToken,
   ): Promise<vscode.InlineCompletionList | null> {
     try {
-      const prefix = document.getText(
-        new vscode.Range(new vscode.Position(position.line, 0), position),
-      )
       this.log(`provideInlineCompletionItems called at ${position.line}:${position.character}`)
+      const pendingCompletionResult = this.handleExistingPendingCompletion(document, position)
+
+      if (pendingCompletionResult !== undefined) {
+        return pendingCompletionResult
+      }
+
+      const prefix = document.getText(new vscode.Range(new vscode.Position(0, 0), position))
+
+      if (token.isCancellationRequested) {
+        this.log('Completion request cancelled before API call')
+        return null
+      }
 
       let completion = ''
       try {
@@ -52,14 +62,60 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
       if (!completion || !completion.trim()) {
         return Promise.resolve({items: []})
       }
-      const newItem = new vscode.InlineCompletionItem(completion)
-      return Promise.resolve({
-        items: [newItem],
-      })
+
+      this.pendingCompletion = {
+        documentUri: document.uri.toString(),
+        edit: {
+          insertText: completion,
+          startPosition: position,
+        },
+      }
+      return this.createInlineCompletionList(completion)
     } catch (error) {
       this.log(`Unexpected error: ${error}`)
       return null
     }
+  }
+
+  private createInlineCompletionList(
+    text: string,
+    range?: vscode.Range,
+  ): vscode.InlineCompletionList {
+    const item = new vscode.InlineCompletionItem(text, range)
+    return new vscode.InlineCompletionList([item])
+  }
+
+  private handleExistingPendingCompletion(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+  ): vscode.InlineCompletionList | null | undefined {
+    if (!this.pendingCompletion) {
+      return undefined
+    }
+
+    const pendingPosition = this.pendingCompletion.edit.startPosition
+    const pendingUri = this.pendingCompletion.documentUri
+
+    if (document.uri.toString() !== pendingUri) {
+      this.clearPendingCompletion()
+      return undefined
+    }
+
+    if (position.line !== pendingPosition.line) {
+      this.clearPendingCompletion()
+      return undefined
+    }
+
+    if (position.character === pendingPosition.character) {
+      return this.createInlineCompletionList(this.pendingCompletion.edit.insertText)
+    }
+
+    this.clearPendingCompletion()
+    return undefined
+  }
+
+  private clearPendingCompletion(): void {
+    this.pendingCompletion = null
   }
 
   private async callCompletionApi(

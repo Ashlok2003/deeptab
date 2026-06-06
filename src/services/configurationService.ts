@@ -19,7 +19,7 @@ const DEFAULTS: TabCompletionConfig = {
   groqApiKey: process.env.GROQ_API_KEY || '',
   openRouterApiKey: process.env.OPENROUTER_API_KEY || '',
   model: 'qwen/qwen3-32b',
-  openrouterModel: 'deepseek/deepseek-v4-flash:free',
+  openrouterModel: 'poolside/laguna-xs.2:free',
   maxTokens: 2048,
 }
 
@@ -71,7 +71,7 @@ export class ConfigurationService implements vscode.Disposable {
     return {
       fireworksApiKey: config.get<string>('fireworksApiKey', DEFAULTS.fireworksApiKey) || '',
       groqApiKey: config.get<string>('groqApiKey', DEFAULTS.groqApiKey) || '',
-      openRouterApiKey: config.get<string>('openRouterApiKey', DEFAULTS.openRouterApiKey) || '',
+      openRouterApiKey: config.get<string>('openrouterApiKey', DEFAULTS.openRouterApiKey) || '',
       model: config.get<string>('model', DEFAULTS.model) || '',
       openrouterModel: config.get<string>('openrouterModel', DEFAULTS.openrouterModel) || '',
       maxTokens: config.get<number>('maxTokens', DEFAULTS.maxTokens) || 2048,

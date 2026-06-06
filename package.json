@@ -1,6 +1,6 @@
 {
   "name": "deeptab",
-  "displayName": "deeptab",
+  "displayName": "Deeptab",
   "description": "Context-aware AI coding assistant with intelligent completion, code explanation, and review capabilities.",
   "version": "0.0.1",
   "engines": {
@@ -13,7 +13,49 @@
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
-  "contributes": {},
+  "contributes": {
+    "configuration": {
+      "type": "object",
+      "title": "Deeptab Configuration",
+      "properties": {
+        "deeptab.fireworksApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the Fireworks service. Required for deeptab to function."
+        },
+        "deeptab.groqApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the Groq service. Required for deeptab to function."
+        },
+        "deeptab.openrouterApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the OpenRouter service. Required for deeptab to function."
+        },
+        "deeptab.openrouterModel": {
+          "type": "string",
+          "default": "poolside/laguna-xs.2:free",
+          "description": "OpenRouter model to use for code completions."
+        },
+        "deeptab.model": {
+          "type": "string",
+          "default": "qwen/qwen3-32b",
+          "description": "AI model for Groq/Fireworks providers."
+        },
+        "deeptab.maxTokens": {
+          "type": "number",
+          "default": 2048,
+          "description": "Maximum number of tokens for AI responses."
+        },
+        "deeptab.temperature": {
+          "type": "number",
+          "default": 0.1,
+          "description": "Temperature setting for AI creativity (0.0 - 1.0)."
+        }
+      }
+    }
+  },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
