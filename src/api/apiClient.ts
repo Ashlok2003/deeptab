@@ -137,11 +137,14 @@ export class ApiClient implements vscode.Disposable {
     try {
       while (true) {
         const {done, value} = await reader.read()
-        if (done) {
-          break
-        }
 
-        const parsed = parseSSEChunk(buffer, decoder.decode(value, {stream: true}))
+        // On EOF, flush the decoder and force-parse any unterminated final
+        // line so the last fragment is never dropped.
+        const chunk = done
+          ? decoder.decode() + '\n'
+          : decoder.decode(value, {stream: true})
+
+        const parsed = parseSSEChunk(buffer, chunk)
         buffer = parsed.buffer
 
         for (const error of parsed.errors) {
@@ -150,7 +153,7 @@ export class ApiClient implements vscode.Disposable {
         for (const content of parsed.contents) {
           yield content
         }
-        if (parsed.done) {
+        if (parsed.done || done) {
           return
         }
       }

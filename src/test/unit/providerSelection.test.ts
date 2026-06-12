@@ -17,4 +17,9 @@ describe('selectProvider', () => {
   it('falls back to fireworks as last resort', () => {
     assert.strictEqual(selectProvider({openrouter: '', groq: '', fireworks: 'k'}), 'fireworks')
   })
+
+  it('treats whitespace-only keys as unconfigured', () => {
+    assert.strictEqual(selectProvider({openrouter: '   ', groq: '\t', fireworks: ''}), null)
+    assert.strictEqual(selectProvider({openrouter: '  ', groq: 'k', fireworks: ''}), 'groq')
+  })
 })

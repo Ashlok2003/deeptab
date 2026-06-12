@@ -84,16 +84,16 @@ export class InlineCompletionProvider
         this.log(`Serving remaining session text: "${remaining}"`)
         return this.createInlineCompletionList(remaining)
       }
-      if (this.session) {
-        // Session exists but does not apply at this location — drop it.
-        this.session = null
-      }
+      // A session that doesn't apply here is kept: the document is
+      // unchanged, so it stays valid if the cursor returns. Document
+      // edits, editor switch, and close invalidate it via listeners.
 
       /* Stage 2: Cache */
 
       const prefix = document.getText(
         new vscode.Range(new vscode.Position(position.line, 0), position),
       )
+      const requestVersion = document.version
 
       if (token.isCancellationRequested) {
         this.log('Completion request cancelled before API call')
@@ -122,9 +122,17 @@ export class InlineCompletionProvider
         return {items: []}
       }
 
+      // The document may have changed while the request was in flight;
+      // a completion generated from a stale prefix must not be recorded
+      // or shown.
+      if (token.isCancellationRequested || document.version !== requestVersion) {
+        this.log('Discarding completion generated for a stale document version')
+        return null
+      }
+
       this.session = createSession(
         document.uri.toString(),
-        document.version,
+        requestVersion,
         {line: position.line, character: position.character},
         completion,
       )

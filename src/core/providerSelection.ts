@@ -15,7 +15,7 @@ const PRIORITY: ApiProvider[] = ['openrouter', 'groq', 'fireworks']
 
 export function selectProvider(keys: ProviderKeys): ApiProvider | null {
   for (const provider of PRIORITY) {
-    if (keys[provider]) {
+    if (keys[provider]?.trim()) {
       return provider
     }
   }
