@@ -3,6 +3,11 @@
   "displayName": "Deeptab",
   "description": "Context-aware AI coding assistant with intelligent completion, code explanation, and review capabilities.",
   "version": "0.0.1",
+  "publisher": "ashlok2003",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ashlok2003/deeptab.git"
+  },
   "engines": {
     "vscode": "^1.120.0"
   },
@@ -62,16 +67,22 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "npm run test:unit && npm run test:integration",
+    "pretest:unit": "npm run compile",
+    "test:unit": "mocha 'out/test/unit/**/*.test.js'",
+    "test:integration": "vscode-test",
+    "coverage": "c8 --include 'out/core/**' --check-coverage --lines 90 mocha 'out/test/unit/**/*.test.js'"
   },
   "devDependencies": {
-    "@types/vscode": "^1.120.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "typescript-eslint": "^8.56.1",
-    "eslint": "^9.39.3",
-    "typescript": "^5.9.3",
+    "@types/vscode": "^1.120.0",
     "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "@vscode/test-electron": "^2.5.2",
+    "c8": "^11.0.0",
+    "eslint": "^9.39.3",
+    "mocha": "^11.7.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1"
   }
 }
