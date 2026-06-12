@@ -137,7 +137,9 @@ export class ApiClient implements vscode.Disposable {
     try {
       while (true) {
         const {done, value} = await reader.read()
-        if (done) break
+        if (done) {
+          break
+        }
 
         const parsed = parseSSEChunk(buffer, decoder.decode(value, {stream: true}))
         buffer = parsed.buffer
