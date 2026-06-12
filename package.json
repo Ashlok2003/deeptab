@@ -3,6 +3,11 @@
   "displayName": "Deeptab",
   "description": "Context-aware AI coding assistant with intelligent completion, code explanation, and review capabilities.",
   "version": "0.0.1",
+  "publisher": "ashlok2003",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ashlok2003/deeptab.git"
+  },
   "engines": {
     "vscode": "^1.120.0"
   },
