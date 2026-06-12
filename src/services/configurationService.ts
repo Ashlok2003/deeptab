@@ -10,6 +10,7 @@ export interface TabCompletionConfig {
   model: string
   openrouterModel: string
   maxTokens: number
+  temperature: number
 
   /* Cache Settings */
 }
@@ -21,6 +22,14 @@ const DEFAULTS: TabCompletionConfig = {
   model: 'qwen/qwen3-32b',
   openrouterModel: 'poolside/laguna-xs.2:free',
   maxTokens: 2048,
+  temperature: 0.1,
+}
+
+function clampTemperature(value: number): number {
+  if (Number.isNaN(value)) {
+    return DEFAULTS.temperature
+  }
+  return Math.min(1, Math.max(0, value))
 }
 
 /**
@@ -78,6 +87,9 @@ export class ConfigurationService implements vscode.Disposable {
       model: config.get<string>('model', DEFAULTS.model) || '',
       openrouterModel: config.get<string>('openrouterModel', DEFAULTS.openrouterModel) || '',
       maxTokens: config.get<number>('maxTokens', DEFAULTS.maxTokens) || 2048,
+      temperature: clampTemperature(
+        config.get<number>('temperature', DEFAULTS.temperature) ?? DEFAULTS.temperature,
+      ),
     }
   }
 
@@ -113,6 +125,10 @@ export class ConfigurationService implements vscode.Disposable {
 
   get maxTokens(): number {
     return this.cachedConfig.maxTokens
+  }
+
+  get temperature(): number {
+    return this.cachedConfig.temperature
   }
 
   onConfigChange(callback: (config: TabCompletionConfig) => void): vscode.Disposable {

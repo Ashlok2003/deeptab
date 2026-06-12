@@ -1,26 +1,66 @@
 import * as vscode from 'vscode'
 import {ApiClient} from '../api/apiClient'
-import {ChatMessage, PendingCompletion, ReplacementEdit} from '../utils/types'
+import {ChatMessage} from '../utils/types'
+import {
+  CompletionSession,
+  PlainContentChange,
+  applyDocumentChange,
+  createSession,
+  getRemainingText,
+} from '../core/completionSession'
 
 /**
  * Inline completion provider for DeepTab.
  *
  * Collects the current editing context, generates AI-powered completion
  * suggestions, and returns them as VS Code inline completion items.
- * The provider also emits diagnostic logs to the configured output
- * channel to assist with debugging and performance monitoring.
+ *
+ * Suggestion state lives in a single version-aware {@link CompletionSession}:
+ * document change events advance it while the user types through the
+ * suggestion and invalidate it on any external edit (formatter, git
+ * checkout, multi-cursor edits), so a stale suggestion is never replayed.
  */
-export class InlineCompletionProvider implements vscode.InlineCompletionItemProvider {
+export class InlineCompletionProvider
+  implements vscode.InlineCompletionItemProvider, vscode.Disposable
+{
   private readonly outputChannel: vscode.OutputChannel
   private readonly apiClient: ApiClient
-  private pendingCompletion: PendingCompletion | null = null
-  private lastCompletionText = ''
-  private lastCompletionPosition: vscode.Position | null = null
-  private lastCompletionUri: string | null = null
+  private readonly disposables: vscode.Disposable[] = []
+  private session: CompletionSession | null = null
 
   constructor(outputChannel: vscode.OutputChannel) {
     this.outputChannel = outputChannel
     this.apiClient = new ApiClient(outputChannel)
+    this.registerSessionInvalidation()
+  }
+
+  private registerSessionInvalidation(): void {
+    this.disposables.push(
+      vscode.workspace.onDidChangeTextDocument((event) => {
+        const before = this.session
+        this.session = applyDocumentChange(
+          this.session,
+          event.document.uri.toString(),
+          event.document.version,
+          event.contentChanges.map(toPlainChange),
+        )
+        if (before && !this.session) {
+          this.log('Session invalidated by document change')
+        }
+      }),
+      vscode.window.onDidChangeActiveTextEditor((editor) => {
+        if (this.session && editor?.document.uri.toString() !== this.session.uri) {
+          this.session = null
+          this.log('Session invalidated by editor switch')
+        }
+      }),
+      vscode.workspace.onDidCloseTextDocument((document) => {
+        if (this.session && document.uri.toString() === this.session.uri) {
+          this.session = null
+          this.log('Session invalidated by document close')
+        }
+      }),
+    )
   }
 
   async provideInlineCompletionItems(
@@ -31,19 +71,25 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
   ): Promise<vscode.InlineCompletionList | null> {
     try {
       this.log(`provideInlineCompletionItems called at ${position.line}:${position.character}`)
-      /* Stage 1: Check for existing pending completion */
-      const pendingCompletionResult = this.handleExistingPendingCompletion(document, position)
 
-      if (pendingCompletionResult !== undefined) {
-        return pendingCompletionResult
+      /* Stage 1: Serve the active session (replay at anchor or continue
+         after the user typed part of the suggestion) without an API call. */
+      const remaining = getRemainingText(
+        this.session,
+        document.uri.toString(),
+        document.version,
+        {line: position.line, character: position.character},
+      )
+      if (remaining !== null) {
+        this.log(`Serving remaining session text: "${remaining}"`)
+        return this.createInlineCompletionList(remaining)
       }
+      if (this.session) {
+        // Session exists but does not apply at this location — drop it.
+        this.session = null
+      }
+
       /* Stage 2: Cache */
-
-      /* Stage 3: Try to continue the previous prediction */
-      const continueResult = this.tryContinuePrediction(document, position)
-      if (continueResult !== undefined) {
-        return continueResult
-      }
 
       const prefix = document.getText(
         new vscode.Range(new vscode.Position(position.line, 0), position),
@@ -73,119 +119,26 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
       }
 
       if (!completion || !completion.trim()) {
-        return Promise.resolve({items: []})
+        return {items: []}
       }
 
-      const edit: ReplacementEdit = {
-        insertText: completion,
-        startPosition: position,
-      }
+      this.session = createSession(
+        document.uri.toString(),
+        document.version,
+        {line: position.line, character: position.character},
+        completion,
+      )
 
-      return this.activateCompletion(edit, document)
+      return this.createInlineCompletionList(completion)
     } catch (error) {
       this.log(`Unexpected error: ${error}`)
       return null
     }
   }
 
-  private activateCompletion(
-    edit: ReplacementEdit,
-    document: vscode.TextDocument,
-  ): vscode.InlineCompletionList | null {
-    this.lastCompletionText = edit.insertText
-    this.lastCompletionPosition = edit.startPosition
-    this.lastCompletionUri = document.uri.toString()
-
-    this.pendingCompletion = {
-      documentUri: document.uri.toString(),
-      edit,
-    }
-
-    return this.createInlineCompletionList(edit.insertText)
-  }
-
-  private tryContinuePrediction(
-    document: vscode.TextDocument,
-    position: vscode.Position,
-  ): vscode.InlineCompletionList | null | undefined {
-    if (
-      !this.lastCompletionText ||
-      !this.lastCompletionPosition ||
-      !this.lastCompletionUri
-    ) {
-      return undefined
-    }
-
-    const charsSinceCompletion = position.character - this.lastCompletionPosition.character
-    if (position.line !== this.lastCompletionPosition.line || charsSinceCompletion <= 0) {
-      return undefined
-    }
-
-    const typedText = document.getText(new vscode.Range(this.lastCompletionPosition, position))
-
-    if (
-      charsSinceCompletion <= this.lastCompletionText.length &&
-      this.lastCompletionText.startsWith(typedText)
-    ) {
-      const remaining = this.lastCompletionText.slice(typedText.length)
-      if (remaining) {
-        this.log(`Continuing prediction with remaining text: "${remaining}"`)
-        return this.createInlineCompletionList(remaining, new vscode.Range(position, position))
-      }
-      this.log('User has typed the entire completion text')
-      this.lastCompletionText = ''
-      this.lastCompletionPosition = null
-      return null
-    }
-
-    this.log(
-      `Divergence detected: expected ${this.lastCompletionText}, but user typed "${typedText}"`,
-    )
-    this.lastCompletionText = ''
-    this.lastCompletionPosition = null
-    this.clearPendingCompletion()
-    return undefined
-  }
-
-  private createInlineCompletionList(
-    text: string,
-    range?: vscode.Range,
-  ): vscode.InlineCompletionList {
-    const item = new vscode.InlineCompletionItem(text, range)
+  private createInlineCompletionList(text: string): vscode.InlineCompletionList {
+    const item = new vscode.InlineCompletionItem(text)
     return new vscode.InlineCompletionList([item])
-  }
-
-  private handleExistingPendingCompletion(
-    document: vscode.TextDocument,
-    position: vscode.Position,
-  ): vscode.InlineCompletionList | null | undefined {
-    if (!this.pendingCompletion) {
-      return undefined
-    }
-
-    const pendingPosition = this.pendingCompletion.edit.startPosition
-    const pendingUri = this.pendingCompletion.documentUri
-
-    if (document.uri.toString() !== pendingUri) {
-      this.clearPendingCompletion()
-      return undefined
-    }
-
-    if (position.line !== pendingPosition.line) {
-      this.clearPendingCompletion()
-      return undefined
-    }
-
-    if (position.character === pendingPosition.character) {
-      return this.createInlineCompletionList(this.pendingCompletion.edit.insertText)
-    }
-
-    this.clearPendingCompletion()
-    return undefined
-  }
-
-  private clearPendingCompletion(): void {
-    this.pendingCompletion = null
   }
 
   private async callCompletionApi(
@@ -217,5 +170,21 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
 
   private log(message: string) {
     this.outputChannel.appendLine(`[Provider] ${message}`)
+  }
+
+  dispose(): void {
+    this.disposables.forEach((d) => d.dispose())
+    this.disposables.length = 0
+    this.session = null
+    this.apiClient.dispose()
+  }
+}
+
+function toPlainChange(change: vscode.TextDocumentContentChangeEvent): PlainContentChange {
+  return {
+    startLine: change.range.start.line,
+    startCharacter: change.range.start.character,
+    rangeLength: change.rangeLength,
+    text: change.text,
   }
 }

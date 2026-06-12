@@ -1,8 +1,10 @@
 import * as vscode from 'vscode'
 import {getConfig} from '../services/configurationService'
-import {ChatMessage, ChatStreamChunk} from '../utils/types'
+import {ChatMessage} from '../utils/types'
+import {parseSSEChunk} from '../core/sse'
+import {ApiProvider, selectProvider} from '../core/providerSelection'
 
-export type ApiProvider = 'openrouter' | 'groq' | 'fireworks'
+export type {ApiProvider} from '../core/providerSelection'
 
 interface ProviderConfig {
   endpoint: string
@@ -52,15 +54,11 @@ export class ApiClient implements vscode.Disposable {
 
   getActiveProvider(): ApiProvider | null {
     const config = getConfig()
-    if (config.openRouterApiKey) {
-      return 'openrouter'
-    } else if (config.groqApiKey) {
-      return 'groq'
-    } else if (config.fireworksApiKey) {
-      return 'fireworks'
-    }
-
-    return null
+    return selectProvider({
+      openrouter: config.openRouterApiKey,
+      groq: config.groqApiKey,
+      fireworks: config.fireworksApiKey,
+    })
   }
 
   async complete(
@@ -86,7 +84,7 @@ export class ApiClient implements vscode.Disposable {
       messages,
       max_tokens: maxTokens,
       stream: true,
-      temperature: 0.1, // smaller temperature for more deterministic completions
+      temperature: configService.temperature,
     }
 
     this.log(
@@ -141,30 +139,17 @@ export class ApiClient implements vscode.Disposable {
         const {done, value} = await reader.read()
         if (done) break
 
-        buffer += decoder.decode(value, {stream: true})
-        let lines = buffer.split('\n')
-        buffer = lines.pop() || ''
+        const parsed = parseSSEChunk(buffer, decoder.decode(value, {stream: true}))
+        buffer = parsed.buffer
 
-        for (const rawLine of lines) {
-          const line = rawLine.trim()
-          if (line.startsWith('data:')) {
-            const data = line.slice(5).trim()
-            if (data === '[DONE]') {
-              return
-            }
-
-            try {
-              const chunk = JSON.parse(data) as ChatStreamChunk
-              if (chunk.choices && chunk.choices.length > 0) {
-                const content = chunk.choices[0].delta.content
-                if (content) {
-                  yield content
-                }
-              }
-            } catch (error) {
-              this.log(`Error parsing chunk: ${error}`)
-            }
-          }
+        for (const error of parsed.errors) {
+          this.log(`Error parsing chunk: ${error}`)
+        }
+        for (const content of parsed.contents) {
+          yield content
+        }
+        if (parsed.done) {
+          return
         }
       }
     } catch (error) {
